@@ -1,0 +1,13 @@
+# steam_frame
+
+Scripts and tweaks for the Steam Frame (SteamOS).
+
+| Folder | What it does |
+| --- | --- |
+| [aux-shortcut](aux-shortcut/) | Tap Control on a keyboard to press the headset's Aux/Select button; hold it to drag. |
+
+Each folder has its own README with install steps. To get everything:
+
+```bash
+git clone https://github.com/shadowogre/steam_frame.git
+```
