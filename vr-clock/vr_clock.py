@@ -13,6 +13,7 @@ import argparse
 import ctypes
 import glob
 import json
+import math
 import os
 import time
 
@@ -57,6 +58,54 @@ def device_pose(system, index):
 
 def head_relative(x, y, distance):
     return [[1, 0, 0, x], [0, 1, 0, y], [0, 0, 1, -distance], [0, 0, 0, 1]]
+
+
+def wrist_offset(up, back):
+    """Panel lying flat on the back of the hand, top edge towards the fingers.
+
+    Controller space: -z points towards the fingertips, +y is up out of the
+    back of the hand, so the panel is turned to face +y and nudged back
+    towards the wrist."""
+    return [[1, 0, 0, 0], [0, 0, 1, up], [0, -1, 0, back], [0, 0, 0, 1]]
+
+
+def save_config(**values):
+    """Merge values into the saved settings file (best effort)."""
+    try:
+        try:
+            with open(CONFIG) as f:
+                saved = json.load(f)
+        except (OSError, ValueError):
+            saved = {}
+        saved.update(values)
+        os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+        with open(CONFIG, "w") as f:
+            json.dump(saved, f)
+    except OSError:
+        pass
+
+
+def hand_index(system, hand):
+    """Device index of the left/right controller, or None if it isn't tracked."""
+    role = (openvr.TrackedControllerRole_LeftHand if hand == "left"
+            else openvr.TrackedControllerRole_RightHand)
+    idx = system.getTrackedDeviceIndexForControllerRole(role)
+    return None if idx == openvr.k_unTrackedDeviceIndexInvalid else idx
+
+
+def facing_head(system, hand, offset, threshold):
+    """True when the wrist panel is turned towards your eyes (a glance)."""
+    poses = system.getDeviceToAbsoluteTrackingPose(
+        openvr.TrackingUniverseStanding, 0, openvr.k_unMaxTrackedDeviceCount)
+    head = poses[openvr.k_unTrackedDeviceIndex_Hmd]
+    ctrl = poses[hand]
+    if not (head.bPoseIsValid and ctrl.bPoseIsValid):
+        return False
+    panel = mul(to4(ctrl.mDeviceToAbsoluteTracking), offset)
+    eyes = to4(head.mDeviceToAbsoluteTracking)
+    to_head = [eyes[i][3] - panel[i][3] for i in range(3)]
+    dist = math.sqrt(sum(v * v for v in to_head)) or 1e-6
+    return sum(panel[i][2] * to_head[i] for i in range(3)) / dist > threshold
 
 
 def read_battery():
@@ -154,15 +203,24 @@ def run_once(args):
         ov.setOverlayAlpha(handle, args.opacity)
         ov.setOverlaySortOrder(handle, 100)
 
-        # pin to the headset: x right, y up, -z forward (metres from your eyes)
         hmd = openvr.k_unTrackedDeviceIndex_Hmd
-        pos = head_relative(args.x, args.y, args.distance)
-        ov.setOverlayTransformTrackedDeviceRelative(handle, hmd, to34(pos))
-        # Let it be pointed at and picked up, but only while a menu or the
-        # dashboard is open. (The "interactive if visible" flag would put laser
-        # pointers on the controllers in games, replacing the game's own.)
-        ov.setOverlayInputMethod(handle, openvr.VROverlayInputMethod_Mouse)
-        ov.showOverlay(handle)
+        wrist = args.mode == "wrist"
+        if wrist:
+            # rides on a controller; shown once that controller is tracked
+            offset = args.saved_offset or wrist_offset(args.wrist_up, args.wrist_back)
+            attached = None
+            shown = False
+            # pointing the other controller at it picks it up, like the head clock
+            ov.setOverlayInputMethod(handle, openvr.VROverlayInputMethod_Mouse)
+        else:
+            # pin to the headset: x right, y up, -z forward (metres from your eyes)
+            pos = head_relative(args.x, args.y, args.distance)
+            ov.setOverlayTransformTrackedDeviceRelative(handle, hmd, to34(pos))
+            # Let it be pointed at and picked up, but only while a menu or the
+            # dashboard is open. (The "interactive if visible" flag would put laser
+            # pointers on the controllers in games, replacing the game's own.)
+            ov.setOverlayInputMethod(handle, openvr.VROverlayInputMethod_Mouse)
+            ov.showOverlay(handle)
 
         last = None
         next_look = 0
@@ -177,26 +235,47 @@ def run_once(args):
                 if event.eventType == openvr.VREvent_MouseButtonDown and holder is None:
                     # pick up: re-express the panel's spot relative to the controller
                     holder = event.trackedDeviceIndex
-                    carried = mul(inv(device_pose(system, holder)),
-                                  mul(device_pose(system, hmd), pos))
+                    if wrist:
+                        if holder == attached:
+                            holder = None  # can't carry it with the hand it's strapped to
+                            continue
+                        carried = mul(inv(device_pose(system, holder)),
+                                      mul(device_pose(system, attached), offset))
+                    else:
+                        carried = mul(inv(device_pose(system, holder)),
+                                      mul(device_pose(system, hmd), pos))
                     ov.setOverlayTransformTrackedDeviceRelative(handle, holder, to34(carried))
                 elif event.eventType == openvr.VREvent_MouseButtonUp and holder is not None:
+                    if wrist:
+                        # put down: strap it back onto the wrist controller at the new spot
+                        offset = mul(inv(device_pose(system, attached)),
+                                     mul(device_pose(system, holder), carried))
+                        ov.setOverlayTransformTrackedDeviceRelative(handle, attached, to34(offset))
+                        holder = None
+                        save_config(wrist_offset=[row[:] for row in offset[:3]], wrist_hand=args.hand)
+                        continue
                     # put down: pin to the head again at the new spot, facing you
                     spot = mul(inv(device_pose(system, hmd)),
                                mul(device_pose(system, holder), carried))
                     pos = head_relative(spot[0][3], spot[1][3], -spot[2][3])
                     ov.setOverlayTransformTrackedDeviceRelative(handle, hmd, to34(pos))
                     holder = None
-                    try:
-                        os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
-                        with open(CONFIG, "w") as f:
-                            json.dump({"x": pos[0][3], "y": pos[1][3], "distance": -pos[2][3]}, f)
-                    except OSError:
-                        pass
+                    save_config(x=pos[0][3], y=pos[1][3], distance=-pos[2][3])
+            if wrist and holder is None:
+                idx = hand_index(system, args.hand)
+                if idx != attached:  # controller turned on, off or swapped
+                    if idx is not None:
+                        ov.setOverlayTransformTrackedDeviceRelative(handle, idx, to34(offset))
+                    attached = idx
+                want = idx is not None and (
+                    args.always or facing_head(system, idx, offset, args.glance))
+                if want != shown:
+                    (ov.showOverlay if want else ov.hideOverlay)(handle)
+                    shown = want
             # clicks are listened for constantly, but the time and battery
             # only need a look every so often
             if time.monotonic() < next_look:
-                time.sleep(0.05 if holder is not None else 0.25)
+                time.sleep(0.1 if wrist else 0.05 if holder is not None else 0.25)
                 continue
             next_look = time.monotonic() + args.refresh
             state = (clock_text(args.h24), *read_battery())
@@ -212,16 +291,34 @@ def main():
     p.add_argument("--x", type=float, default=None, help="metres right of centre (negative = left)")
     p.add_argument("--y", type=float, default=None, help="metres above centre (negative = below)")
     p.add_argument("--distance", type=float, default=None, help="metres in front of your face")
-    p.add_argument("--width", type=float, default=0.18, help="panel width in metres")
+    p.add_argument("--mode", choices=("head", "wrist"), default="head",
+                   help="head: pinned to your view; wrist: rides on a controller like a watch")
+    p.add_argument("--hand", choices=("left", "right"), default="left", help="wrist mode: which controller")
+    p.add_argument("--always", action="store_true",
+                   help="wrist mode: always show it, not only when you look at your wrist")
+    p.add_argument("--glance", type=float, default=0.5,
+                   help="wrist mode: how squarely the wrist must face you to show (0 to 1)")
+    p.add_argument("--wrist-up", type=float, default=0.05, help="wrist mode: metres above the controller")
+    p.add_argument("--wrist-back", type=float, default=0.04, help="wrist mode: metres towards your elbow")
+    p.add_argument("--width", type=float, default=None, help="panel width in metres (default 0.18, wrist 0.09)")
     p.add_argument("--opacity", type=float, default=0.9, help="0 to 1")
     p.add_argument("--refresh", type=float, default=5, help="seconds between time/battery checks")
     p.add_argument("--24h", dest="h24", action="store_true", help="show 24-hour time")
     args = p.parse_args()
+    args.glance = min(args.glance, 0.99)  # 1 would need a perfectly square-on wrist, which never happens
+    if args.width is None:
+        args.width = 0.09 if args.mode == "wrist" else 0.18
     try:
         with open(CONFIG) as f:
             saved = json.load(f)
     except (OSError, ValueError):
         saved = {}
+    args.saved_offset = None
+    if args.mode == "wrist":
+        m = saved.get("wrist_offset")
+        # a spot saved for the other wrist would be mirrored, so start fresh
+        if saved.get("wrist_hand") == args.hand and isinstance(m, list) and len(m) == 3:
+            args.saved_offset = [list(map(float, r)) for r in m] + [[0, 0, 0, 1]]
     for name, fallback in (("x", -0.30), ("y", -0.22), ("distance", 1.0)):
         if getattr(args, name) is None:
             setattr(args, name, saved.get(name, fallback))

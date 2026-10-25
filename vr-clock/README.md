@@ -16,6 +16,17 @@ This creates a private Python environment (`.venv`), then starts the overlay as 
 
 Open the SteamVR dashboard or Steam menu (so your controllers show their pointer lasers), point at the panel, hold the trigger, move it, and let go. It pins itself to your view in the new spot, and the spot is remembered in `~/.config/vr-clock.json`. In a game it can't be grabbed, on purpose: making it pointable during games takes over the controllers. Delete that file to go back to the default position.
 
+## Wrist watch mode
+
+Instead of floating in your view, the clock can ride on a controller like a watch:
+
+```bash
+./install.sh --mode wrist              # left hand
+./install.sh --mode wrist --hand right
+```
+
+It appears when you turn your wrist towards your face and hides again when you look away, so it never clutters a game. Add `--always` to keep it visible all the time. If it flickers at the edge of a glance or is slow to show, change `--glance` (0 to 1; lower shows it more easily, default 0.5). To move it on your wrist, point your other controller at it with the dashboard open and hold the trigger. Run `./install.sh` with no options to go back to the floating view.
+
 ## Adjust it
 
 Run with `--help` to see every option. Common ones:

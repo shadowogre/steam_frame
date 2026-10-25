@@ -3,7 +3,62 @@
 #
 #   ./install.sh              install (or reinstall) and enable
 #   ./install.sh --uninstall  stop, disable and remove the service
+#   ./install.sh --help       list all options
 set -e
+
+usage() {
+    cat <<'TEXT'
+install.sh - set up the floating clock + battery overlay for SteamVR
+
+USAGE
+  ./install.sh [options]      install (or reinstall) and start the clock
+  ./install.sh --uninstall    stop it and remove the service
+  ./install.sh --help         show this page (changes nothing)
+
+Installing restarts the clock and can disturb SteamVR, so don't run it
+from inside the headset unless you mean to. Any options you give are saved
+into the service, so they apply every time SteamVR starts. Reinstalling
+without options goes back to the defaults (clock pinned to your view).
+
+OPTIONS
+  --mode head|wrist   head: pinned in your view (default)
+                      wrist: rides on a controller like a watch
+  --hand left|right   wrist mode: which wrist (default left). Switching
+                      wrists forgets the saved position.
+  --always            wrist mode: always show it, not only when you look at
+                      your wrist
+  --glance N          wrist mode: how squarely the wrist must face you to
+                      show, 0 to 1 (default 0.5)
+  --opacity N         0 to 1 (default 0.9)
+  --refresh S         seconds between time/battery checks (default 5)
+  --24h               show 24-hour time
+
+EXAMPLES
+  ./install.sh                              clock pinned in your view
+  ./install.sh --mode wrist                 watch on your left wrist
+  ./install.sh --mode wrist --hand right --always
+
+MOVING IT
+  Open the SteamVR dashboard, point a controller at the clock and hold the
+  trigger to carry it; let go to drop it. In wrist mode, use the controller
+  that is NOT wearing it. The spot is saved in ~/.config/vr-clock.json
+  (delete that file to reset).
+TEXT
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+    esac
+done
+
+# refuse unknown options now rather than installing a service that crashes
+for arg in "$@"; do
+    case "$arg" in
+        --uninstall|--mode|--hand|--always|--glance|--opacity|--refresh|--24h) ;;
+        -*) echo "Unknown option: $arg  (nothing was changed; try ./install.sh --help)"; exit 2 ;;
+    esac
+done
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 UNIT_DIR="$HOME/.config/systemd/user"
@@ -93,7 +148,7 @@ After=steamvr.service
 Type=simple
 WorkingDirectory=$DIR
 # add options here, e.g.  vr_clock.py --24h --x -0.25
-ExecStart=$DIR/.venv/bin/python -u $DIR/vr_clock.py
+ExecStart=$DIR/.venv/bin/python -u $DIR/vr_clock.py $*
 StandardOutput=truncate:$DIR/log.txt
 Restart=always
 RestartSec=3
