@@ -111,6 +111,9 @@ def main():
                     os.close(fd); fds.pop(fd)
                     if state == "drag":
                         press_select(0)
+                    for code in held:  # its key-ups will never arrive: don't leave keys stuck down
+                        emit(kbd, EV_KEY, code, 0)
+                    held.clear()
                     ctrl, state = None, None
                     continue
                 for i in range(0, len(data), EVENT.size):
