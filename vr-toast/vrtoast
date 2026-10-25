@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Send a short message to the VR toast popup.
+
+    vrtoast "dinner is ready"
+    vrtoast -t 10 "stays exactly 10 seconds"
+    vrtoast -t long "stays longer the more you write"
+    vrtoast --place          # drag the popups to where you want them
+    echo "from a pipe" | vrtoast
+
+Over ssh, give the full path: ssh frame.local '~/.local/bin/vrtoast "hi"'
+(ssh doesn't put ~/.local/bin on the PATH). Use \\n or a real newline for line
+breaks. Several messages in a row stack up instead of replacing each other.
+If the popup service isn't running, it falls back to an ordinary desktop
+notification.
+"""
+import argparse
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+
+# not $XDG_RUNTIME_DIR: terminals inside SteamVR's nested desktop point it elsewhere
+SOCK = f"/run/user/{os.getuid()}/vr-toast.sock"
+
+
+def send(p, msg, text):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    try:
+        s.connect(SOCK)
+        s.send(json.dumps(msg).encode())
+    except OSError:
+        if text is None:
+            sys.exit("the vr-toast service isn't running, so there's nothing to place")
+        # service not running: use a plain desktop popup instead
+        if not shutil.which("notify-send"):
+            sys.exit("vr-toast service isn't running and notify-send isn't available")
+        subprocess.run(["notify-send", "-a", "vrtoast", text], check=False)
+        print("(vr-toast service isn't running; sent a desktop notification)", file=sys.stderr)
+
+
+def main():
+    p = argparse.ArgumentParser(description="Show a message as a popup in VR.")
+    p.add_argument("message", nargs="*", help="the text (or pipe it in)")
+    p.add_argument("-t", "--time", default=None, metavar="SECONDS|quick|normal|long",
+                   help="exact seconds, or a speed that scales with message length "
+                        "(default: whatever the service is set to, normally 'normal')")
+    p.add_argument("--place", action="store_true",
+                   help="show a card you can grab and drag to where popups should appear "
+                        "(stays 60 s if not picked up; 15 s after you let go)")
+    args = p.parse_args()
+
+    msg = {}
+    if args.time is not None:
+        if args.time in ("quick", "normal", "long"):
+            msg["speed"] = args.time
+        else:
+            try:
+                msg["secs"] = float(args.time)
+            except ValueError:
+                p.error("-t takes a number of seconds, or quick, normal or long")
+            if msg["secs"] <= 0:
+                p.error("-t must be more than zero")
+
+    if args.place:
+        send(p, {"cmd": "place"}, None)
+        return
+
+    text = " ".join(args.message) if args.message else ("" if sys.stdin.isatty() else sys.stdin.read())
+    text = text.replace("\\n", "\n")  # a typed \n counts as a line break
+    text = "\n".join(" ".join(l.split()) for l in text.strip().splitlines())[:600]
+    if not text:
+        p.error("nothing to show; give some text")
+
+    msg["text"] = text
+    send(p, msg, text)
+
+
+if __name__ == "__main__":
+    main()

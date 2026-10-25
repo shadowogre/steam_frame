@@ -6,6 +6,7 @@ Scripts and tweaks for the Steam Frame (SteamOS).
 | --- | --- |
 | [aux-shortcut](aux-shortcut/) | Tap Control on a keyboard to press the headset's Aux/Select button; hold it to drag. |
 | [vr-clock](vr-clock/) | Floating clock and battery panel that stays in your view in VR. |
+| [vr-toast](vr-toast/) | `vrtoast "message"` pops a notification up in VR; rapid messages stack instead of replacing each other. |
 | [uxplay](uxplay/) | AirPlay screen-mirroring receiver (UxPlay in a Debian distrobox); one-command install/uninstall. |
 
 Each folder has its own README with install steps. To get everything:
