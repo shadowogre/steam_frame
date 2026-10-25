@@ -24,8 +24,42 @@ if [ "$1" = "--uninstall" ]; then
     exit 0
 fi
 
+# --- check what the shortcut needs before changing anything ---
+
+if ! command -v python3 >/dev/null; then
+    echo "Python 3 isn't installed, and this script needs it." >&2
+    exit 1
+fi
+
+if ! systemctl --user show-environment >/dev/null 2>&1; then
+    echo "Can't reach your user services (systemd)." >&2
+    echo "Try again from the main desktop session, or after a reboot." >&2
+    exit 1
+fi
+
+if [ ! -e /dev/uinput ]; then
+    cat >&2 <<MSG
+This device has no /dev/uinput, which lets a program act as a pretend
+button. Open a terminal and type this line (it will ask for your password):
+
+    sudo modprobe uinput
+
+Then run ./install.sh again.
+MSG
+    exit 1
+fi
+
 if ! id -nG | grep -qw input; then
-    echo "Warning: $(id -un) is not in the 'input' group; the script won't be able to read the keyboard." >&2
+    cat >&2 <<MSG
+Your user ($(id -un)) isn't in the "input" group, so the script wouldn't be
+allowed to read the keyboard. To fix it, open a terminal and type this line
+(it will ask for your password):
+
+    sudo usermod -aG input $(id -un)
+
+Then restart the headset and run ./install.sh again.
+MSG
+    exit 1
 fi
 
 mkdir -p "$UNIT_DIR/steamvr.service.wants"
