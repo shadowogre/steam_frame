@@ -147,8 +147,10 @@ WorkingDirectory=$DIR
 # the main desktop session's bus, so the no-VR fallback can show a normal notification
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
 # add options here, e.g.  vr_toast.py --y 0.1 --max-visible 3
+ExecStartPre=$DIR/wait-for-vr.sh
 ExecStart=$DIR/.venv/bin/python -u $DIR/vr_toast.py $*
 StandardOutput=truncate:$DIR/log.txt
+TimeoutStartSec=150
 Restart=always
 RestartSec=3
 

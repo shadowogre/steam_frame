@@ -10,7 +10,7 @@ It draws the panel with cairo and shows it as an OpenVR overlay (in VR, an overl
 ./install.sh
 ```
 
-This creates a private Python environment (`.venv`), then starts the overlay as a user service that launches with SteamVR. Undo with `./install.sh --uninstall`.
+This creates a private Python environment (`.venv`), then starts the overlay as a user service that launches with SteamVR. Undo with `./install.sh --uninstall`. It waits for SteamVR to finish starting first (`wait-for-vr.sh`, kept in this folder so the project stays self-contained), because an overlay that starts too early can race the headset's display startup.
 
 ## Move it
 

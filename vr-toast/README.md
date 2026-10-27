@@ -37,7 +37,7 @@ so nothing is lost.
 ```
 
 It needs `python-cairo` (the installer tells you how to get it if it's missing) and
-starts automatically with SteamVR. The `vrtoast` command is linked into `~/.local/bin`.
+starts automatically with SteamVR. The `vrtoast` command is linked into `~/.local/bin`. It waits for SteamVR to finish starting first (`wait-for-vr.sh`, kept in this folder so the project stays self-contained), because an overlay that starts too early can race the headset's display startup.
 
 ## Placing the popups
 

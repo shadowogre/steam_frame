@@ -148,8 +148,10 @@ After=steamvr.service
 Type=simple
 WorkingDirectory=$DIR
 # add options here, e.g.  vr_clock.py --24h --x -0.25
+ExecStartPre=$DIR/wait-for-vr.sh
 ExecStart=$DIR/.venv/bin/python -u $DIR/vr_clock.py $*
 StandardOutput=truncate:$DIR/log.txt
+TimeoutStartSec=150
 Restart=always
 RestartSec=3
 
