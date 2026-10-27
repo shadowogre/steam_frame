@@ -21,15 +21,27 @@ Open the SteamVR dashboard or Steam menu (so your controllers show their pointer
 Instead of floating in your view, the clock can ride on a controller like a watch:
 
 ```bash
-./install.sh --mode wrist              # left hand
-./install.sh --mode wrist --hand right
+./install.sh --mode wrist              # left wrist
+./install.sh --mode wrist --hand right # right wrist
 ```
 
-It appears when you turn your wrist towards your face and hides again when you look away, so it never clutters a game. Add `--always` to keep it visible all the time. If it flickers at the edge of a glance or is slow to show, change `--glance` (0 to 1; lower shows it more easily, default 0.5). To move it on your wrist, point your other controller at it with the dashboard open and hold the trigger. Run `./install.sh` with no options to go back to the floating view.
+It appears when you turn your wrist towards your face and hides again when you look away, so it never clutters a game. The controller needs to be on and tracked.
+
+| Option | Meaning |
+| --- | --- |
+| `--hand left\|right` | which wrist (default left); only one wrist at a time |
+| `--always` | keep it visible all the time, not just when you look at your wrist |
+| `--glance 0.5` | how squarely your wrist must face you to show it, 0 to 1. Lower shows it more easily; raise it if it pops up when you don't want it |
+
+**Positioning it.** Open the SteamVR dashboard, point your *other* controller at the clock (the one not wearing it), hold the trigger to carry it, and let go to drop it. Tilt it so it faces you like a watch face. The spot is saved in `~/.config/vr-clock.json`, so it survives restarts. Like the floating clock, it can't be grabbed during a game.
+
+**Switching wrists** forgets the saved spot, since a position that suits one wrist would be mirrored on the other; just grab and place it again. Delete `~/.config/vr-clock.json` to reset the position by hand.
+
+Running `./install.sh` with no options goes back to the floating view. Options are saved into the service when you install, so repeat your wrist options each time you reinstall.
 
 ## Adjust it
 
-Run with `--help` to see every option. Common ones:
+Run `./install.sh --help` to see the installer's options. The ones below work when added to the service by hand, as described underneath (`--x`, `--y` and `--distance` only apply to the floating clock):
 
 | Option | Meaning |
 | --- | --- |
